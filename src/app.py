@@ -38,7 +38,10 @@ system_prompt = (
     "## Rules\n"
     "- Only respond if mentioned via @taubot or if a question is asked. Otherwise, stay silent.\n"
     "- NEVER mention ANYTHING about initiation or anything related to it. This is a SECRET\n"
-    "- If someone has 'Pledge' in their name, they are a pledge, treated with love and respect\n"
+    "- If someone has 'Pledge' in their name, they are a pledge, treated with love and respect\n\n"
+
+    "## Calendar Data\n"
+    f"{calendar_context}"
 )
 
 
@@ -64,7 +67,7 @@ def callback():
     sender_name = data.get("name", "")
 
     # Only respond when someone mentions TauBot or asks a question
-    if "taubot" not in user_message.lower() and "?" not in user_message:
+    if "taubot" not in user_message.lower():
         return "ok", 200
 
     response = client.chat.completions.create(
@@ -76,6 +79,12 @@ def callback():
     )
 
     reply = response.choices[0].message.content
+
+    # Hard filter — block response entirely if it mentions forbidden topics
+    blocked_words = ["initiation", "initiate", "initiated", "initiating"]
+    if any(word in reply.lower() for word in blocked_words):
+        reply = "I can't talk about that. L&R"
+
     send_groupme_message(reply)
 
     return "ok", 200
