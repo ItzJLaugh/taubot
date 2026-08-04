@@ -127,6 +127,14 @@ def trigger_check_now():
         return {"success": False, "error": str(e)}, 500
 
 
+@app.route("/announce-upgrade", methods=["POST"])
+def announce_upgrade():
+    """Send upgrade announcement to GroupMe (one-time use)."""
+    message = "TauBot upgraded\n\n- TauBot will now send automatic updates on upcoming events in addition to replying to requests."
+    send_groupme_message(message)
+    return {"success": True, "message": "Upgrade announcement sent"}, 200
+
+
 @app.teardown_appcontext
 def shutdown(exception=None):
     """Clean up scheduler on app shutdown."""
