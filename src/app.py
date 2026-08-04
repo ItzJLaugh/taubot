@@ -4,12 +4,21 @@ from flask import Flask, request
 from openai import OpenAI
 from dotenv import load_dotenv
 from services.calendar_service import get_upcoming, format_events_for_context
+from services.scheduler import init_scheduler, shutdown_scheduler, get_scheduler_status
 
 load_dotenv()
 
 app = Flask(__name__)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 BOT_ID = os.getenv("GROUPME_BOT_ID")
+
+# Initialize background scheduler for automatic notifications
+try:
+    init_scheduler()
+    print("✓ Background scheduler initialized for automatic event notifications")
+except Exception as e:
+    print(f"⚠ Warning: Could not initialize scheduler: {e}")
+    print("  Automatic notifications will not work. Please check APScheduler installation.")
 
 # Fetch calendar events at startup
 try:
@@ -31,6 +40,7 @@ system_prompt = (
     "- End conversations with 'L&R' (Love and Respect)\n\n"
 
     "## Calendar Access\n"
+    "If there is a event/date/deadline that mentions anything about intitiation, DO NOT SAY ANYTHING ABOUT IT! IGNORE IT COMPLETELY and never mention it"
     "You have access to the fraternity's Google Calendar. Use the data below "
     "to answer questions about upcoming events, deadlines, and important dates. "
     "If the calendar shows no events, let the user know.\n\n"
@@ -82,9 +92,9 @@ def callback():
     reply = response.choices[0].message.content
 
     # Hard filter — block response entirely if it mentions forbidden topics
-    blocked_words = ["initiation", "initiate", "initiated", "initiating"]
+    blocked_words = ["initiation", "initiate", "initiated", "initiating", "ritual"]
     if any(word in reply.lower() for word in blocked_words):
-        reply = "I can't talk about that. L&R"
+        reply = ""
 
     send_groupme_message(reply)
 
@@ -96,5 +106,35 @@ def health():
     return "TauBot is running!", 200
 
 
+@app.route("/scheduler/status", methods=["GET"])
+def scheduler_status():
+    """Check the status of the notification scheduler."""
+    status = get_scheduler_status()
+    return status, 200
+
+
+@app.route("/scheduler/check-now", methods=["POST"])
+def trigger_check_now():
+    """Manually trigger an immediate notification check (for testing)."""
+    try:
+        from scripts.calendar_notifier import check_and_notify
+        success = check_and_notify()
+        return {
+            "success": success,
+            "message": "Manual check completed" if success else "Manual check failed"
+        }, 200 if success else 500
+    except Exception as e:
+        return {"success": False, "error": str(e)}, 500
+
+
+@app.teardown_appcontext
+def shutdown(exception=None):
+    """Clean up scheduler on app shutdown."""
+    pass  # APScheduler manages its own shutdown
+
+
 if __name__ == "__main__":
-    app.run(port=5000)
+    try:
+        app.run(port=5000)
+    finally:
+        shutdown_scheduler()

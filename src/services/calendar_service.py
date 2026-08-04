@@ -5,6 +5,10 @@ import json
 import datetime
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from pydantic import BaseModel
+from flask import Flask, request
+
+app = Flask(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
@@ -75,8 +79,18 @@ def get_upcoming(days=40):
     return parsed
 
 
+RESTRICTED_KEYWORDS = ["initiation", "initiate", "initiated", "initiating"]
+
+def _is_restricted(event):
+    fields = [event.get("summary", ""), event.get("description", ""), event.get("location", "")]
+    combined = " ".join(fields).lower()
+    return any(word in combined for word in RESTRICTED_KEYWORDS)
+
+
 def format_events_for_context(events):
     """Format a list of events into a string the AI can use as context."""
+    events = [e for e in events if not _is_restricted(e)]
+
     if not events:
         return "There are no upcoming events on the calendar."
 
@@ -90,3 +104,5 @@ def format_events_for_context(events):
         lines.append(line)
 
     return "\n".join(lines)
+
+
